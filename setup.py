@@ -29,7 +29,7 @@ packages = [
 ]
 
 install_requires = [
-    'azure-storage-blob>=2.1.0,<3',
+    'azure-storage-blob==12.5',
     'azure-storage-file>=2.1.0,<3',
     'bitstring>=3.1.7,<4',
     'click>=7.0,<8',

@@ -26,7 +26,7 @@
 import logging
 # non-stdlib imports
 import azure.common
-import azure.storage.blob.models
+
 # local imports
 import blobxfer.models.azure
 import blobxfer.util
@@ -48,8 +48,11 @@ def check_if_single_blob(client, container, prefix, timeout=None):
     if blobxfer.util.blob_is_snapshot(prefix):
         return True
     try:
-        client.get_blob_properties(
-            container_name=container, blob_name=prefix, timeout=timeout)
+        container: azure.storage.blob.ContainerClient = client.get_container_client(container)
+        blob: azure.storage.blob.BlobClient = container.get_blob_client(prefix)
+        blob.get_blob_properties(
+            timeout=timeout
+        )
     except azure.common.AzureMissingResourceHttpError:
         return False
     return True
@@ -73,22 +76,27 @@ def get_blob_properties(client, container, prefix, mode, timeout=None):
             'cannot list Azure Blobs with incompatible mode: {}'.format(
                 mode))
     try:
-        blob = client.get_blob_properties(
-            container_name=container, blob_name=prefix, timeout=timeout)
+        container: azure.storage.blob.ContainerClient = client.get_container_client(container)
+        blob: azure.storage.blob.BlobClient = container.get_blob_client(prefix)
+        blob_properties = blob.get_blob_properties(
+            timeout=timeout
+        )
+        # hack this to ensure compatibility
+        blob.properties = blob_properties
     except azure.common.AzureMissingResourceHttpError:
         return None
     if ((mode == blobxfer.models.azure.StorageModes.Append and
-         blob.properties.blob_type !=
+         blob_properties.blob_type !=
          azure.storage.blob.models._BlobTypes.AppendBlob) or
             (mode == blobxfer.models.azure.StorageModes.Block and
-             blob.properties.blob_type !=
+             blob_properties.blob_type !=
              azure.storage.blob.models._BlobTypes.BlockBlob) or
             (mode == blobxfer.models.azure.StorageModes.Page and
-             blob.properties.blob_type !=
+             blob_properties.blob_type !=
              azure.storage.blob.models._BlobTypes.PageBlob)):
         raise RuntimeError(
             'existing blob type {} mismatch with mode {}'.format(
-                blob.properties.blob_type, mode))
+                blob_properties.blob_type, mode))
     return blob
 
 
@@ -103,41 +111,43 @@ def list_blobs(client, container, prefix, mode, recursive, timeout=None):
     :param blobxfer.models.azure.StorageModes mode: storage mode
     :param bool recursive: recursive
     :param int timeout: timeout
-    :rtype: azure.storage.blob.models.Blob
-    :return: generator of blobs
+    :rtype: BlobProperties
+    :return: generator of blobs properties
     """
     if mode == blobxfer.models.azure.StorageModes.File:
         raise RuntimeError('cannot list Azure Files from blob client')
+    
+    container: azure.storage.blob.ContainerClient = client.get_container_client(container)
     if blobxfer.util.blob_is_snapshot(prefix):
-        base_blob, snapshot = blobxfer.util.parse_blob_snapshot_parameter(
-            prefix)
-        blob = client.get_blob_properties(
-            container_name=container, blob_name=base_blob, snapshot=snapshot,
-            timeout=timeout)
+        base_blob, snapshot = blobxfer.util.parse_blob_snapshot_parameter(prefix)
+        blob: azure.storage.blob.BlobClient = container.get_blob_client(prefix)
+        blob_properties = blob.get_blob_properties(timeout=timeout)
+        blob.properties = blob_properties
         yield blob
         return
-    blobs = client.list_blobs(
-        container_name=container,
-        prefix=prefix if blobxfer.util.is_not_empty(prefix) else None,
+    
+    blob_properties = container.list_blobs(
+        name_starts_with=prefix if blobxfer.util.is_not_empty(prefix) else None,
         include=azure.storage.blob.models.Include.METADATA,
         timeout=timeout,
     )
-    for blob in blobs:
+    for blob in blob_properties:
         if (mode == blobxfer.models.azure.StorageModes.Append and
-                blob.properties.blob_type !=
+                blob.blob_type !=
                 azure.storage.blob.models._BlobTypes.AppendBlob):
             continue
         elif (mode == blobxfer.models.azure.StorageModes.Block and
-                blob.properties.blob_type !=
+                blob.blob_type !=
                 azure.storage.blob.models._BlobTypes.BlockBlob):
             continue
         elif (mode == blobxfer.models.azure.StorageModes.Page and
-                blob.properties.blob_type !=
+                blob.blob_type !=
                 azure.storage.blob.models._BlobTypes.PageBlob):
             continue
         if not recursive and '/' in blob.name:
             continue
         # auto or match, yield the blob
+        # return properties here!
         yield blob
 
 
@@ -151,13 +161,13 @@ def list_all_blobs(client, container, timeout=None):
     :rtype: azure.storage.blob.models.Blob
     :return: generator of blobs
     """
-    blobs = client.list_blobs(
-        container_name=container,
-        prefix=None,
+       
+    container: azure.storage.blob.ContainerClient = client.get_container_client(container)
+    blob_properties = container.list_blobs(
         timeout=timeout,
     )
-    for blob in blobs:
-        yield blob
+    for blob in blob_properties:
+        yield blob_properties
 
 
 def delete_blob(client, container, name, timeout=None):
@@ -168,9 +178,9 @@ def delete_blob(client, container, name, timeout=None):
     :param str name: blob name
     :param int timeout: timeout
     """
-    client.delete_blob(
-        container_name=container,
-        blob_name=name,
+    container: azure.storage.blob.ContainerClient = client.get_container_client(container)
+    container.delete_blob(
+        name,
         delete_snapshots=azure.storage.blob.models.DeleteSnapshot.Include,
         timeout=timeout,
     )  # noqa
@@ -186,15 +196,14 @@ def get_blob_range(ase, offsets, timeout=None):
     :rtype: bytes
     :return: content for blob range
     """
-    return ase.client._get_blob(
-        container_name=ase.container,
-        blob_name=ase.name,
-        snapshot=ase.snapshot,
-        start_range=offsets.range_start,
-        end_range=offsets.range_end,
+    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
+    return container.download_blob(
+        ase.name,
+        offset=offsets.range_start,
+        length=offsets.range_end - offsets.range_start,
         validate_content=False,  # HTTPS takes care of integrity during xfer
         timeout=timeout,
-    ).content
+    ).content_as_bytes()
 
 
 def create_container(ase, containers_created, timeout=None):
@@ -211,9 +220,10 @@ def create_container(ase, containers_created, timeout=None):
     if key in containers_created:
         return
     if ase.client.create_container(
-            container_name=ase.container,
-            fail_on_exist=False,
-            timeout=timeout):
+        ase.container,
+        fail_on_exist=False,
+        timeout=timeout
+    ):
         logger.info(
             'created blob container {} on storage account {}'.format(
                 ase.container, ase.client.account_name))
@@ -228,15 +238,17 @@ def set_blob_properties(ase, md5, timeout=None):
     :param str md5: md5 as base64
     :param int timeout: timeout
     """
-    ase.client.set_blob_properties(
-        container_name=ase.container,
-        blob_name=ase.name,
+
+    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
+    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+    blob.set_http_headers(
         content_settings=azure.storage.blob.models.ContentSettings(
             content_type=ase.content_type,
             content_md5=md5,
             cache_control=ase.cache_control,
         ),
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )  # noqa
 
 
 def set_blob_metadata(ase, metadata, timeout=None):
@@ -246,8 +258,9 @@ def set_blob_metadata(ase, metadata, timeout=None):
     :param dict metadata: metadata kv pairs
     :param int timeout: timeout
     """
-    ase.client.set_blob_metadata(
-        container_name=ase.container,
-        blob_name=ase.name,
+    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
+    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+    blob.set_blob_metadata(
         metadata=metadata,
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )  # noqa
