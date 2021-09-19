@@ -78,6 +78,9 @@ def create_blob(ase, data, md5, metadata, timeout=None):
     container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
     # need to decode for v12
     md5 = blobxfer.util.base64_decode_string(md5) if md5 else None
+    # the previous sdk assumed b'' if data was None, replicate behavior here
+    if data is None:
+        return b''
     container.upload_blob(
         ase.name,
         data=data,
@@ -113,6 +116,9 @@ def put_block(ase, offsets, data, timeout=None):
     """
     container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
     blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+    # the previous sdk assumed b'' if data was None, replicate behavior here
+    if data is None:
+        return b''
     blob.stage_block(
         data,
         block_id=_format_block_id(offsets.chunk_num),
@@ -136,6 +142,9 @@ def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
         src_url = src_ase.path
     else:
         if blobxfer.util.is_not_empty(src_ase.client.account_key):
+            # TODO: handle generation of the keys here
+            raise NotImplementedError
+
             if src_ase.mode == blobxfer.models.azure.StorageModes.File:
                 sas = src_ase.client.generate_file_shared_access_signature(
                     share_name=src_ase.container,

@@ -58,7 +58,6 @@ def create_blob(ase, timeout=None):
     """
     container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
     blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-
     blob.create_page_blob(
         size=blobxfer.util.page_align_content_length(ase.size),
         content_settings=azure.storage.blob.models.ContentSettings(
@@ -79,7 +78,8 @@ def put_page(ase, page_start, page_end, data, timeout=None):
     """
     container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
     blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-
+    if data is None:
+        data = b''
     blob.upload_page(
         data,
         offset=page_start,

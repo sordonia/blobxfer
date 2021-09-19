@@ -57,7 +57,6 @@ def create_blob(ase, timeout=None):
     """
     container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
     blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-
     blob.create_append_blob(
         content_settings=azure.storage.blob.models.ContentSettings(
             content_type=ase.content_type,
@@ -74,6 +73,8 @@ def append_block(ase, data, timeout=None):
     """
     container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
     blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+    if data is None:
+        data = b''
     blob.append_block(
         data,
         validate_content=False,  # integrity is enforced with HTTPS
