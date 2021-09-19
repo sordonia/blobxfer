@@ -46,28 +46,8 @@ def create_client(storage_account, timeout, proxy):
     :rtype: PageBlobService
     :return: block blob service client
     """
-    if storage_account.is_sas:
-        client = azure.storage.blob.PageBlobService(
-            account_name=storage_account.name,
-            sas_token=storage_account.key,
-            endpoint_suffix=storage_account.endpoint,
-            request_session=storage_account.session,
-            socket_timeout=timeout.timeout)
-    else:
-        client = azure.storage.blob.PageBlobService(
-            account_name=storage_account.name,
-            account_key=storage_account.key,
-            endpoint_suffix=storage_account.endpoint,
-            request_session=storage_account.session,
-            socket_timeout=timeout.timeout)
-    # set proxy
-    if proxy is not None:
-        client.set_proxy(
-            proxy.host, proxy.port, proxy.username, proxy.password)
-    # set retry policy
-    client.retry = blobxfer.retry.ExponentialRetryWithMaxWait(
-        max_retries=timeout.max_retries).retry
-    return client
+    from blobxfer.operations.azure.blob.block import create_client
+    return create_client(storage_account, timeout, proxy)
 
 
 def create_blob(ase, timeout=None):
@@ -76,14 +56,15 @@ def create_blob(ase, timeout=None):
     :param blobxfer.models.azure.StorageEntity ase: Azure StorageEntity
     :param int timeout: timeout
     """
-    ase.client.create_blob(
-        container_name=ase.container,
-        blob_name=ase.name,
-        content_length=blobxfer.util.page_align_content_length(ase.size),
+    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
+    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+
+    blob.create_page_blob(
+        size=blobxfer.util.page_align_content_length(ase.size),
         content_settings=azure.storage.blob.models.ContentSettings(
             content_type=ase.content_type,
         ),
-        timeout=timeout)  # noqa
+        timeout=timeout)
 
 
 def put_page(ase, page_start, page_end, data, timeout=None):
@@ -96,14 +77,16 @@ def put_page(ase, page_start, page_end, data, timeout=None):
     :param bytes data: data
     :param int timeout: timeout
     """
-    ase.client.update_page(
-        container_name=ase.container,
-        blob_name=ase.name,
-        page=data,
-        start_range=page_start,
-        end_range=page_end,
+    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
+    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+
+    blob.upload_page(
+        data,
+        offset=page_start,
+        length=page_end - page_start,
         validate_content=False,  # integrity is enforced with HTTPS
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )
 
 
 def resize_blob(ase, size, timeout=None):
@@ -113,8 +96,9 @@ def resize_blob(ase, size, timeout=None):
     :param int size: content length
     :param int timeout: timeout
     """
-    ase.client.resize_blob(
-        container_name=ase.container,
-        blob_name=ase.name,
-        content_length=blobxfer.util.page_align_content_length(size),
+    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
+    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+
+    blob.resize_blob(
+        blobxfer.util.page_align_content_length(size),
         timeout=timeout)  # noqa
