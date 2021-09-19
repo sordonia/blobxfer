@@ -129,21 +129,21 @@ def list_blobs(client, container, prefix, mode, recursive, timeout=None):
     
     blob_properties = container.list_blobs(
         name_starts_with=prefix if blobxfer.util.is_not_empty(prefix) else None,
-        include=azure.storage.blob.models.Include.METADATA,
+        include=['metadata'],
         timeout=timeout,
     )
     for blob in blob_properties:
         if (mode == blobxfer.models.azure.StorageModes.Append and
                 blob.blob_type !=
-                azure.storage.blob.models._BlobTypes.AppendBlob):
+                azure.storage.blob._models.BlobType.AppendBlob):
             continue
         elif (mode == blobxfer.models.azure.StorageModes.Block and
                 blob.blob_type !=
-                azure.storage.blob.models._BlobTypes.BlockBlob):
+                azure.storage.blob._models.BlobType.BlockBlob):
             continue
         elif (mode == blobxfer.models.azure.StorageModes.Page and
                 blob.blob_type !=
-                azure.storage.blob.models._BlobTypes.PageBlob):
+                azure.storage.blob._models.BlobType.PageBlob):
             continue
         if not recursive and '/' in blob.name:
             continue

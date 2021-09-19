@@ -362,19 +362,19 @@ class StorageEntity(object):
         self._can_create_containers = sa.can_create_containers
         self._name = blob.name
         self._snapshot = blob.snapshot
-        self._lmt = blob.properties.last_modified
-        self._size = blob.properties.content_length
-        self._md5 = blob.properties.content_settings.content_md5
-        self._cache_control = blob.properties.content_settings.cache_control
-        self._content_type = blob.properties.content_settings.content_type
-        if blob.properties.blob_type == BlobType.AppendBlob:
+        self._lmt = blob.last_modified
+        self._size = blob.size
+        self._md5 = blob.content_settings.content_md5
+        self._cache_control = blob.content_settings.cache_control
+        self._content_type = blob.content_settings.content_type
+        if blob.blob_type == BlobType.AppendBlob:
             self._mode = StorageModes.Append
             self._client = sa.append_blob_client
-        elif blob.properties.blob_type == BlobType.BlockBlob:
-            self._access_tier = blob.properties.blob_tier
+        elif blob.blob_type == BlobType.BlockBlob:
+            self._access_tier = blob.blob_tier
             self._mode = StorageModes.Block
             self._client = sa.block_blob_client
-        elif blob.properties.blob_type == BlobType.PageBlob:
+        elif blob.blob_type == BlobType.PageBlob:
             self._mode = StorageModes.Page
             self._client = sa.page_blob_client
 
