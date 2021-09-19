@@ -76,10 +76,12 @@ def create_blob(ase, data, md5, metadata, timeout=None):
     :param int timeout: timeout
     """
     container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+    # need to decode for v12
+    md5 = blobxfer.util.base64_decode_string(md5) if md5 else None
     container.upload_blob(
-        data,
-        content_settings=azure.storage.blob.models.ContentSettings(
+        ase.name,
+        data=data,
+        content_settings=azure.storage.blob._models.ContentSettings(
             content_type=ase.content_type,
             content_md5=md5,
             cache_control=ase.cache_control,
@@ -186,6 +188,7 @@ def put_block_list(
     ]
     container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
     blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+    md5 = blobxfer.util.base64_decode_string(md5) if md5 else None
 
     blob.commit_block_list(
         block_list=block_list,
