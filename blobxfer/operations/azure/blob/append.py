@@ -45,28 +45,8 @@ def create_client(storage_account, timeout, proxy):
     :rtype: AppendBlobService
     :return: append blob service client
     """
-    if storage_account.is_sas:
-        client = azure.storage.blob.AppendBlobService(
-            account_name=storage_account.name,
-            sas_token=storage_account.key,
-            endpoint_suffix=storage_account.endpoint,
-            request_session=storage_account.session,
-            socket_timeout=timeout.timeout)
-    else:
-        client = azure.storage.blob.AppendBlobService(
-            account_name=storage_account.name,
-            account_key=storage_account.key,
-            endpoint_suffix=storage_account.endpoint,
-            request_session=storage_account.session,
-            socket_timeout=timeout.timeout)
-    # set proxy
-    if proxy is not None:
-        client.set_proxy(
-            proxy.host, proxy.port, proxy.username, proxy.password)
-    # set retry policy
-    client.retry = blobxfer.retry.ExponentialRetryWithMaxWait(
-        max_retries=timeout.max_retries).retry
-    return client
+    from blobxfer.operations.azure.blob.block import create_client
+    return create_client(storage_account, timeout, proxy)
 
 
 def create_blob(ase, timeout=None):
@@ -75,9 +55,10 @@ def create_blob(ase, timeout=None):
     :param blobxfer.models.azure.StorageEntity ase: Azure StorageEntity
     :param int timeout: timeout
     """
-    ase.client.create_blob(
-        container_name=ase.container,
-        blob_name=ase.name,
+    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
+    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+
+    blob.create_append_blob(
         content_settings=azure.storage.blob.models.ContentSettings(
             content_type=ase.content_type,
         ),
@@ -91,9 +72,9 @@ def append_block(ase, data, timeout=None):
     :param bytes data: data
     :param int timeout: timeout
     """
-    ase.client.append_block(
-        container_name=ase.container,
-        blob_name=ase.name,
-        block=data,
+    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
+    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
+    blob.append_block(
+        data,
         validate_content=False,  # integrity is enforced with HTTPS
         timeout=timeout)  # noqa

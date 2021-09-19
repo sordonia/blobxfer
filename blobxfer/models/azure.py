@@ -26,7 +26,7 @@
 import enum
 import pathlib
 # non-stdlib imports
-from azure.storage.blob.models import _BlobTypes as BlobTypes
+from azure.storage.blob._models import BlobType
 # local imports
 import blobxfer.models.metadata
 import blobxfer.util
@@ -367,14 +367,14 @@ class StorageEntity(object):
         self._md5 = blob.properties.content_settings.content_md5
         self._cache_control = blob.properties.content_settings.cache_control
         self._content_type = blob.properties.content_settings.content_type
-        if blob.properties.blob_type == BlobTypes.AppendBlob:
+        if blob.properties.blob_type == BlobType.AppendBlob:
             self._mode = StorageModes.Append
             self._client = sa.append_blob_client
-        elif blob.properties.blob_type == BlobTypes.BlockBlob:
+        elif blob.properties.blob_type == BlobType.BlockBlob:
             self._access_tier = blob.properties.blob_tier
             self._mode = StorageModes.Block
             self._client = sa.block_blob_client
-        elif blob.properties.blob_type == BlobTypes.PageBlob:
+        elif blob.properties.blob_type == BlobType.PageBlob:
             self._mode = StorageModes.Page
             self._client = sa.page_blob_client
 
