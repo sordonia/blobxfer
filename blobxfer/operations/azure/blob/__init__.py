@@ -220,15 +220,19 @@ def create_container(ase, containers_created, timeout=None):
     key = ase.client.account_name + ':blob=' + ase.container
     if key in containers_created:
         return
-    if ase.client.create_container(
-        ase.container,
-        timeout=timeout
-    ):
+    try:
+        ase.client.create_container(
+            ase.container,
+            timeout=timeout
+        )
         logger.info(
             'created blob container {} on storage account {}'.format(
                 ase.container, ase.client.account_name))
-    # always add to set (as it could be pre-existing)
-    containers_created.add(key)
+    except azure.core.exceptions.ResourceExistsError:
+        pass
+    finally:
+        # always add to set (as it could be pre-existing)
+        containers_created.add(key)
 
 
 def set_blob_properties(ase, md5, timeout=None):
