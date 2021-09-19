@@ -7,6 +7,7 @@ import pathlib
 # non-stdlib imports
 import azure.common
 import azure.storage.common
+import azure.core.exceptions
 import pytest
 # local imports
 import blobxfer.util as util
@@ -140,7 +141,7 @@ def test_check_if_single_file():
     client = mock.MagicMock()
     client.get_file_properties = mock.MagicMock()
     client.get_file_properties.side_effect = \
-        azure.common.AzureMissingResourceHttpError('msg', 404)
+        azure.core.exceptions.ResourceNotFoundError('msg', 404)
 
     result = ops.check_if_single_file(client, 'a', 'b/c')
     assert not result[0]

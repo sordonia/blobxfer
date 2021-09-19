@@ -6,6 +6,7 @@ import unittest.mock as mock
 # non-stdlib imports
 import azure.common
 import azure.storage.blob
+import azure.core.exceptions
 import pytest
 # local imports
 import blobxfer.models.azure as azmodels
@@ -27,7 +28,7 @@ def test_check_if_single_blob():
     client = mock.MagicMock()
     client.get_blob_properties = mock.MagicMock()
     client.get_blob_properties.side_effect = \
-        azure.common.AzureMissingResourceHttpError('msg', 404)
+        azure.core.exceptions.ResourceNotFoundError('msg', 404)
 
     result = ops.check_if_single_blob(client, 'a', 'b/c')
     assert not result

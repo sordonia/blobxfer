@@ -122,7 +122,7 @@ def get_file_properties(
             timeout=timeout,
             snapshot=snapshot,
         )
-    except azure.common.AzureMissingResourceHttpError:
+    except azure.core.exceptions.ResourceNotFoundError:
         return None
 
 

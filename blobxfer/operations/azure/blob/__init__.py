@@ -26,6 +26,7 @@
 import logging
 # non-stdlib imports
 import azure.common
+import azure.core.exceptions
 
 # local imports
 import blobxfer.models.azure
@@ -53,7 +54,7 @@ def check_if_single_blob(client, container, prefix, timeout=None):
         blob.get_blob_properties(
             timeout=timeout
         )
-    except azure.common.AzureMissingResourceHttpError:
+    except azure.core.exceptions.ResourceNotFoundError:
         return False
     return True
 
@@ -83,7 +84,7 @@ def get_blob_properties(client, container, prefix, mode, timeout=None):
         )
         # hack this to ensure compatibility
         blob.properties = blob_properties
-    except azure.common.AzureMissingResourceHttpError:
+    except azure.core.exceptions.ResourceNotFoundError:
         return None
     if ((mode == blobxfer.models.azure.StorageModes.Append and
          blob_properties.blob_type !=
@@ -221,7 +222,6 @@ def create_container(ase, containers_created, timeout=None):
         return
     if ase.client.create_container(
         ase.container,
-        fail_on_exist=False,
         timeout=timeout
     ):
         logger.info(
