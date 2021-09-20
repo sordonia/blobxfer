@@ -147,12 +147,12 @@ def list_blobs(client, container, prefix, mode, recursive, timeout=None):
     if blobxfer.util.blob_is_snapshot(prefix):
         base_blob, snapshot = blobxfer.util.parse_blob_snapshot_parameter(prefix)
 
-        blob: azure.storage.blob.BlobClient = container.get_blob_client(prefix)
+        blob: azure.storage.blob.BlobClient = container_client.get_blob_client(prefix)
         blob_properties = blob.get_blob_properties(timeout=timeout)
         yield blob_properties
         return
 
-    blob_properties = container.list_blobs(
+    blob_properties = container_client.list_blobs(
         name_starts_with=prefix if blobxfer.util.is_not_empty(prefix) else None,
         include=['metadata'],
         timeout=timeout,
