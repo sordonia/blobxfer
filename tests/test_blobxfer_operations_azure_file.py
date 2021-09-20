@@ -17,12 +17,19 @@ import blobxfer.operations.azure as azops
 import blobxfer.operations.azure.file as ops
 
 
+class MockResponse:
+    def __init__(self, reason, status_code):
+        self.reason = reason
+        self.status_code = status_code
+
+
 def test_create_client():
     to = mock.MagicMock()
     to.max_retries = None
+    proxy = None
 
     sa = azops.StorageAccount(
-        'name', 'AAAAAA==', 'core.windows.net', 10, to, mock.MagicMock())
+        'name', 'AAAAAA==', 'core.windows.net', 10, to, proxy)
     client = ops.create_client(sa, to, mock.MagicMock())
     assert client is not None
     assert isinstance(client, azure.storage.file.FileService)
@@ -141,7 +148,7 @@ def test_check_if_single_file():
     client = mock.MagicMock()
     client.get_file_properties = mock.MagicMock()
     client.get_file_properties.side_effect = \
-        azure.core.exceptions.ResourceNotFoundError('msg', 404)
+        azure.core.exceptions.ResourceNotFoundError('msg', MockResponse("not found", 404))
 
     result = ops.check_if_single_file(client, 'a', 'b/c')
     assert not result[0]
