@@ -726,9 +726,7 @@ class Descriptor(object):
         if self.hmac is not None:
             mac = self._ase.encryption_metadata.encryption_authentication.\
                 message_authentication_code
-            # digest = blobxfer.util.base64_encode_as_string(self.hmac.digest())
-            # sdk v12 has bytes md5
-            digest = self.hmac.digest()
+            digest = blobxfer.util.base64_encode_as_string(self.hmac.digest())
             if digest == mac:
                 check = True
             msg = '{}: {}, {} {} <L..R> {}'.format(
@@ -740,9 +738,7 @@ class Descriptor(object):
                 mac,
             )
         elif self.md5 is not None:
-            # old: digest = blobxfer.util.base64_encode_as_string(self.md5.digest())
-            # sdk v12 has bytes md5
-            digest = self.md5.digest()
+            digest = blobxfer.util.base64_encode_as_string(self.md5.digest())
             if digest == self._ase.md5:
                 check = True
             msg = 'MD5: {}, {} {} <L..R> {}'.format(
