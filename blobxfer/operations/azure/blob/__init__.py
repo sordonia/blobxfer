@@ -201,7 +201,7 @@ def get_blob_range(ase, offsets, timeout=None):
     return container.download_blob(
         ase.name,
         offset=offsets.range_start,
-        length=offsets.range_end - offsets.range_start,
+        length=offsets.range_end - offsets.range_start + 1,
         validate_content=False,  # HTTPS takes care of integrity during xfer
         timeout=timeout,
     ).content_as_bytes()

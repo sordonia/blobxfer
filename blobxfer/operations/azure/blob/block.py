@@ -173,7 +173,7 @@ def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
         block_id=_format_block_id(offsets.chunk_num),
         source_url=src_url,
         source_offset=offsets.range_start,
-        source_length=offsets.range_end - offsets.range_start,
+        source_length=offsets.range_end - offsets.range_start + 1,
         source_content_md5=None,
         timeout=timeout
     )  # noqa
