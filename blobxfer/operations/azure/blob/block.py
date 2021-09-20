@@ -52,12 +52,13 @@ def create_client(storage_account, timeout, proxy):
     :rtype: azure.storage.blob.BlockBlobService
     :return: block blob service client
     """
-    
+
     client = azure.storage.blob.BlobServiceClient(
         f"https://{storage_account.name}.blob.core.windows.net",
         credential=storage_account.key,
         session=storage_account.session,
-        connection_timeout=timeout.timeout
+        connection_timeout=timeout.timeout[0],
+        read_timeout=timeout.timeout[1]
     )
 
     # set proxy
