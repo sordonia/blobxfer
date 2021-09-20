@@ -26,8 +26,10 @@
 import logging
 # non-stdlib imports
 import azure.storage.blob
+
 # local imports
 import blobxfer.retry
+from blobxfer.operations.azure.blob import get_blob_client_from_ase
 
 # create logger
 logger = logging.getLogger(__name__)
@@ -55,13 +57,12 @@ def create_blob(ase, timeout=None):
     :param blobxfer.models.azure.StorageEntity ase: Azure StorageEntity
     :param int timeout: timeout
     """
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-    blob.create_append_blob(
-        content_settings=azure.storage.blob.models.ContentSettings(
+    get_blob_client_from_ase(ase).create_append_blob(
+        content_settings=azure.storage.blob._models.ContentSettings(
             content_type=ase.content_type,
         ),
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )  # noqa
 
 
 def append_block(ase, data, timeout=None):
@@ -71,11 +72,8 @@ def append_block(ase, data, timeout=None):
     :param bytes data: data
     :param int timeout: timeout
     """
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-    if data is None:
-        data = b''
-    blob.append_block(
-        data,
+    get_blob_client_from_ase(ase).append_block(
+        data or b'',
         validate_content=False,  # integrity is enforced with HTTPS
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )  # noqa

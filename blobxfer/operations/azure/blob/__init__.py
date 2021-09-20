@@ -27,6 +27,7 @@ import logging
 # non-stdlib imports
 import azure.common
 import azure.core.exceptions
+from azure.storage.blob import ContainerClient, BlobClient
 
 # local imports
 import blobxfer.models.azure
@@ -34,6 +35,36 @@ import blobxfer.util
 
 # create logger
 logger = logging.getLogger(__name__)
+
+
+def convert_md5_to_bytes(md5: str) -> bytes:
+    if not md5:
+        return None
+    if type(md5) == bytes:
+        return md5
+    return blobxfer.util.base64_decode_string(md5)
+
+
+def get_container_client(client, container) -> ContainerClient:
+    """Instantiates a ContainerClient from a BlobServiceClient.
+    """
+    return client.get_container_client(container)
+
+
+def get_container_client_from_ase(ase) -> ContainerClient:
+    return ase.client.get_container_client(ase.container)
+
+
+def get_blob_client(client, container, prefix) -> BlobClient:
+    """Instantiates a BlobClient from a BlobServiceClient.
+    """
+    return get_container_client(client, container).get_blob_client(prefix)
+
+
+def get_blob_client_from_ase(ase) -> BlobClient:
+    """Instantiates a BlobClient from a ase object.
+    """
+    return get_blob_client(ase.client, ase.container, ase.name)
 
 
 def check_if_single_blob(client, container, prefix, timeout=None):
@@ -49,11 +80,7 @@ def check_if_single_blob(client, container, prefix, timeout=None):
     if blobxfer.util.blob_is_snapshot(prefix):
         return True
     try:
-        container: azure.storage.blob.ContainerClient = client.get_container_client(container)
-        blob: azure.storage.blob.BlobClient = container.get_blob_client(prefix)
-        blob.get_blob_properties(
-            timeout=timeout
-        )
+        get_blob_client(client, container, prefix).get_blob_properties(timeout=timeout)
     except azure.core.exceptions.ResourceNotFoundError:
         return False
     return True
@@ -64,6 +91,7 @@ def get_blob_properties(client, container, prefix, mode, timeout=None):
     #        blobxfer.models.azure.StorageModes, int) ->
     #        azure.storage.blob.models.Blob
     """Get blob properties
+
     :param azure.storage.blob.BaseBlobService client: blob client
     :param str container: container
     :param str prefix: path prefix
@@ -77,9 +105,7 @@ def get_blob_properties(client, container, prefix, mode, timeout=None):
             'cannot list Azure Blobs with incompatible mode: {}'.format(
                 mode))
     try:
-        container: azure.storage.blob.ContainerClient = client.get_container_client(container)
-        blob: azure.storage.blob.BlobClient = container.get_blob_client(prefix)
-        blob_properties = blob.get_blob_properties(
+        blob_properties = get_blob_client(client, container, prefix).get_blob_properties(
             timeout=timeout
         )
     except azure.core.exceptions.ResourceNotFoundError:
@@ -96,7 +122,7 @@ def get_blob_properties(client, container, prefix, mode, timeout=None):
         raise RuntimeError(
             'existing blob type {} mismatch with mode {}'.format(
                 blob_properties.blob_type, mode))
-    return blob
+    return blob_properties
 
 
 def list_blobs(client, container, prefix, mode, recursive, timeout=None):
@@ -116,15 +142,16 @@ def list_blobs(client, container, prefix, mode, recursive, timeout=None):
     if mode == blobxfer.models.azure.StorageModes.File:
         raise RuntimeError('cannot list Azure Files from blob client')
     
-    container: azure.storage.blob.ContainerClient = client.get_container_client(container)
+    container_client = get_container_client(client, container)
+
     if blobxfer.util.blob_is_snapshot(prefix):
         base_blob, snapshot = blobxfer.util.parse_blob_snapshot_parameter(prefix)
+
         blob: azure.storage.blob.BlobClient = container.get_blob_client(prefix)
         blob_properties = blob.get_blob_properties(timeout=timeout)
-        blob.properties = blob_properties
-        yield blob
+        yield blob_properties
         return
-    
+
     blob_properties = container.list_blobs(
         name_starts_with=prefix if blobxfer.util.is_not_empty(prefix) else None,
         include=['metadata'],
@@ -161,11 +188,7 @@ def list_all_blobs(client, container, timeout=None):
     :return: generator of blobs
     """
        
-    container: azure.storage.blob.ContainerClient = client.get_container_client(container)
-    blob_properties = container.list_blobs(
-        timeout=timeout,
-    )
-    for blob in blob_properties:
+    for blob_properties in get_container_client(client, container).list_blobs(timeout=timeout):
         yield blob_properties
 
 
@@ -177,8 +200,7 @@ def delete_blob(client, container, name, timeout=None):
     :param str name: blob name
     :param int timeout: timeout
     """
-    container: azure.storage.blob.ContainerClient = client.get_container_client(container)
-    container.delete_blob(
+    get_container_client(client, container).delete_blob(
         name,
         delete_snapshots=azure.storage.blob.models.DeleteSnapshot.Include,
         timeout=timeout,
@@ -195,8 +217,7 @@ def get_blob_range(ase, offsets, timeout=None):
     :rtype: bytes
     :return: content for blob range
     """
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    return container.download_blob(
+    return get_container_client(ase.client, ase.container).download_blob(
         ase.name,
         offset=offsets.range_start,
         length=offsets.range_end - offsets.range_start + 1,
@@ -240,13 +261,10 @@ def set_blob_properties(ase, md5, timeout=None):
     :param str md5: md5 as base64
     :param int timeout: timeout
     """
-
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-    blob.set_http_headers(
+    get_blob_client_from_ase(ase).set_http_headers(
         content_settings=azure.storage.blob.models.ContentSettings(
             content_type=ase.content_type,
-            content_md5=md5,
+            content_md5=convert_md5_to_bytes(md5),
             cache_control=ase.cache_control,
         ),
         timeout=timeout
@@ -260,9 +278,7 @@ def set_blob_metadata(ase, metadata, timeout=None):
     :param dict metadata: metadata kv pairs
     :param int timeout: timeout
     """
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-    blob.set_blob_metadata(
+    get_blob_client_from_ase(ase).set_blob_metadata(
         metadata=metadata,
         timeout=timeout
     )  # noqa

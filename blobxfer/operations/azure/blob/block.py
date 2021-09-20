@@ -30,6 +30,11 @@ import azure.storage.blob
 # local imports
 import blobxfer.models.azure
 import blobxfer.retry
+from blobxfer.operations.azure.blob import (
+    get_blob_client_from_ase, get_blob_client,
+    get_container_client, convert_md5_to_bytes,
+    get_container_client_from_ase
+)
 
 # create logger
 logger = logging.getLogger(__name__)
@@ -52,13 +57,14 @@ def create_client(storage_account, timeout, proxy):
         f"https://{storage_account.name}.blob.core.windows.net",
         credential=storage_account.key,
         session=storage_account.session,
-        connection_timeout=timeout.timeout)
+        connection_timeout=timeout.timeout
+    )
 
     # set proxy
-    # if proxy is not None:
-    #    client.set_proxy(
-    #        proxy.host, proxy.port, proxy.username, proxy.password)
-
+    if proxy is not None:
+        raise NotImplementedError()
+        #    client.set_proxy(
+        #        proxy.host, proxy.port, proxy.username, proxy.password)
     # set retry policy
     client._config.retry_policy = blobxfer.retry.ExponentialRetryWithMaxWait(
         max_retries=timeout.max_retries).retry
@@ -75,18 +81,14 @@ def create_blob(ase, data, md5, metadata, timeout=None):
     :param dict metadata: metadata kv pairs
     :param int timeout: timeout
     """
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    # need to decode for v12
-    md5 = blobxfer.util.base64_decode_string(md5) if md5 else None
-    # the previous sdk assumed b'' if data was None, replicate behavior here
-    if data is None:
-        return b''
-    container.upload_blob(
+    # the previous sdk assumed b'' if data was None, replicate behavior for data
+    # also convert md5 as bytes are expected
+    get_container_client_from_ase(ase).upload_blob(
         ase.name,
-        data=data,
+        data=data or b'',
         content_settings=azure.storage.blob._models.ContentSettings(
             content_type=ase.content_type,
-            content_md5=md5,
+            content_md5=convert_md5_to_bytes(md5),
             cache_control=ase.cache_control,
         ),
         metadata=metadata,
@@ -114,16 +116,12 @@ def put_block(ase, offsets, data, timeout=None):
     :param bytes data: data
     :param int timeout: timeout
     """
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-    # the previous sdk assumed b'' if data was None, replicate behavior here
-    if data is None:
-        return b''
-    blob.stage_block(
-        data,
+    get_blob_client_from_ase(ase).stage_block(
+        data or b'',
         block_id=_format_block_id(offsets.chunk_num),
         validate_content=False,  # integrity is enforced with HTTPS
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )  # noqa
 
 
 def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
@@ -142,10 +140,8 @@ def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
         src_url = src_ase.path
     else:
         if blobxfer.util.is_not_empty(src_ase.client.account_key):
-            # TODO: handle generation of the keys here
-            raise NotImplementedError
-
             if src_ase.mode == blobxfer.models.azure.StorageModes.File:
+                # still v2
                 sas = src_ase.client.generate_file_shared_access_signature(
                     share_name=src_ase.container,
                     file_name=src_ase.name,
@@ -154,10 +150,13 @@ def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
                         days=7),
                 )
             else:
-                sas = src_ase.client.generate_blob_shared_access_signature(
-                    container_name=src_ase.container,
-                    blob_name=src_ase.name,
-                    permission=azure.storage.blob.BlobPermissions(read=True),
+                # this is v12
+                from azure.storage.blob import generate_blob_sas
+                sas = generate_blob_sas(
+                    src_ase.client.account_name,
+                    src_ase.container,
+                    src_ase.name,
+                    permission=azure.storage.blob.BlobSasPermissions(read=True),
                     expiry=datetime.datetime.utcnow() + datetime.timedelta(
                         days=7),
                 )
@@ -166,10 +165,7 @@ def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
         src_url = 'https://{}/{}?{}'.format(
             src_ase.client.primary_endpoint, src_ase.path, sas)
 
-    container: azure.storage.blob.ContainerClient = dst_ase.client.get_container_client(dst_ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(dst_ase.name)
-    
-    blob.stage_block_from_url(
+    get_blob_client_from_ase(dst_ase).stage_block_from_url(
         block_id=_format_block_id(offsets.chunk_num),
         source_url=src_url,
         source_offset=offsets.range_start,
@@ -195,15 +191,12 @@ def put_block_list(
         azure.storage.blob.BlobBlock(id=_format_block_id(x))
         for x in range(0, last_block_num + 1)
     ]
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-    md5 = blobxfer.util.base64_decode_string(md5) if md5 else None
 
-    blob.commit_block_list(
+    get_blob_client_from_ase(ase).commit_block_list(
         block_list=block_list,
         content_settings=azure.storage.blob.models.ContentSettings(
             content_type=ase.content_type,
-            content_md5=md5,
+            content_md5=convert_md5_to_bytes(md5),
             cache_control=ase.cache_control,
         ),
         metadata=metadata,
@@ -227,11 +220,8 @@ def get_committed_block_list(ase, timeout=None):
         blob_name = ase.name
         snapshot = None
 
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(blob_name)
-
     # committed type is already the default, [0] is committed blocks
-    return blob.get_block_list(snapshot=snapshot, timeout=timeout)[0]
+    return get_blob_client_from_ase(ase).get_block_list(snapshot=snapshot, timeout=timeout)[0]
 
 
 def set_blob_access_tier(ase, timeout=None):
@@ -240,10 +230,7 @@ def set_blob_access_tier(ase, timeout=None):
     :param blobxfer.models.azure.StorageEntity ase: Azure StorageEntity
     :param int timeout: timeout
     """
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-
-    blob.set_standard_blob_tier(
+    get_blob_client_from_ase(ase).set_standard_blob_tier(
         standard_blob_tier=ase.access_tier,
         timeout=timeout
     )  # noqa

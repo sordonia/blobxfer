@@ -26,9 +26,11 @@
 import logging
 # non-stdlib imports
 import azure.storage.blob
+
 # local imports
 import blobxfer.retry
 import blobxfer.util
+from blobxfer.operations.azure.blob import get_blob_client_from_ase
 
 # create logger
 logger = logging.getLogger(__name__)
@@ -56,14 +58,13 @@ def create_blob(ase, timeout=None):
     :param blobxfer.models.azure.StorageEntity ase: Azure StorageEntity
     :param int timeout: timeout
     """
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-    blob.create_page_blob(
+    get_blob_client_from_ase(ase).create_page_blob(
         size=blobxfer.util.page_align_content_length(ase.size),
         content_settings=azure.storage.blob.models.ContentSettings(
             content_type=ase.content_type,
         ),
-        timeout=timeout)
+        timeout=timeout
+    )
 
 
 def put_page(ase, page_start, page_end, data, timeout=None):
@@ -76,14 +77,10 @@ def put_page(ase, page_start, page_end, data, timeout=None):
     :param bytes data: data
     :param int timeout: timeout
     """
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-    if data is None:
-        data = b''
-    blob.upload_page(
-        data,
+    get_blob_client_from_ase(ase).upload_page(
+        data or b'',
         offset=page_start,
-        length=page_end - page_start,
+        length=page_end - page_start + 1,
         validate_content=False,  # integrity is enforced with HTTPS
         timeout=timeout
     )
@@ -96,9 +93,7 @@ def resize_blob(ase, size, timeout=None):
     :param int size: content length
     :param int timeout: timeout
     """
-    container: azure.storage.blob.ContainerClient = ase.client.get_container_client(ase.container)
-    blob: azure.storage.blob.BlobClient = container.get_blob_client(ase.name)
-
-    blob.resize_blob(
+    get_blob_client_from_ase(ase).resize_blob(
         blobxfer.util.page_align_content_length(size),
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )  # noqa
