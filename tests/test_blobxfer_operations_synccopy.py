@@ -722,9 +722,13 @@ def test_check_copy_conditions(gmfm):
         src_ase, dst_ase) == ops.SynccopyAction.Copy
 
 
-@mock.patch('blobxfer.operations.azure.file.get_file_properties')
-@mock.patch('blobxfer.operations.azure.blob.get_blob_properties')
-def test_check_for_existing_remote(gbp, gfp):
+def test_check_for_existing_remote(mocker):
+    import azure
+    gfp = mocker.patch('blobxfer.operations.azure.file.get_file_properties')
+    b = azure.storage.blob._models.BlobProperties(name='name', content_md5=b'abc')
+    gbp = mocker.patch('blobxfer.operations.azure.blob.get_blob_properties',
+                       return_value=b, name='gbp')
+
     s = ops.SyncCopy(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
     s._general_options.dry_run = False
     s._spec.options.server_side_copy = False
@@ -763,7 +767,7 @@ def test_check_for_existing_remote(gbp, gfp):
     with mock.patch(
             'blobxfer.models.crypto.EncryptionMetadata.'
             'encryption_metadata_exists', return_value=False):
-        gbp.return_value = mock.MagicMock()
+        gbp.return_value = b
         assert s._check_for_existing_remote(
             sa, 'cont', 'name', src_mode) is not None
 

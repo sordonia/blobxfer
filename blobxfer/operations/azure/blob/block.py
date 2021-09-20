@@ -58,8 +58,11 @@ def create_client(storage_account, timeout, proxy):
         credential=storage_account.key,
         session=storage_account.session,
         connection_timeout=timeout.timeout[0],
-        read_timeout=timeout.timeout[1]
+        read_timeout=timeout.timeout[1],
     )
+    version = blobxfer.__version__
+    user_agent = client._config.user_agent_policy._user_agent
+    client._config.user_agent_policy._user_agent = f"blobxfer/{version} {user_agent}"
 
     # set proxy
     if proxy is not None:
