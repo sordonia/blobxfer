@@ -82,8 +82,6 @@ def get_blob_properties(client, container, prefix, mode, timeout=None):
         blob_properties = blob.get_blob_properties(
             timeout=timeout
         )
-        # hack this to ensure compatibility
-        blob.properties = blob_properties
     except azure.core.exceptions.ResourceNotFoundError:
         return None
     if ((mode == blobxfer.models.azure.StorageModes.Append and
