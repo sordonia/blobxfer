@@ -58,7 +58,7 @@ setup(
     },
     zip_safe=False,
     install_requires=install_requires,
-    tests_require=['pytest'],
+    tests_require=['pytest', 'pytest-mock'],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Environment :: Console',

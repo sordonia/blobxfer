@@ -17,13 +17,13 @@ def test_create_client():
     to.max_retries = None
 
     sa = azops.StorageAccount(
-        'name', 'AAAAAA==', 'core.windows.net', 10, to, mock.MagicMock())
-    client = ops.create_client(sa, to, mock.MagicMock())
+        'name', 'AAAAAA==', 'core.windows.net', 10, to, proxy=None)
+    client = ops.create_client(sa, to, proxy=None)
     assert client is not None
-    assert isinstance(client, azure.storage.blob.AppendBlobService)
+    assert isinstance(client, azure.storage.blob.BlobServiceClient)
     assert isinstance(
-        client.authentication,
-        azure.storage.common._auth._StorageSharedKeyAuthentication)
+        client.credential,
+        azure.storage.blob._shared.authentication.SharedKeyCredentialPolicy)
     assert client._USER_AGENT_STRING.startswith(
         'blobxfer/{}'.format(blobxfer.version.__version__))
     assert client._httpclient.proxies is not None

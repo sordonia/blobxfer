@@ -112,13 +112,13 @@ def get_blob_properties(client, container, prefix, mode, timeout=None):
         return None
     if ((mode == blobxfer.models.azure.StorageModes.Append and
          blob_properties.blob_type !=
-         azure.storage.blob.models._BlobTypes.AppendBlob) or
+         azure.storage.blob._models.BlobType.AppendBlob) or
             (mode == blobxfer.models.azure.StorageModes.Block and
              blob_properties.blob_type !=
-             azure.storage.blob.models._BlobTypes.BlockBlob) or
+             azure.storage.blob._models.BlobType.BlockBlob) or
             (mode == blobxfer.models.azure.StorageModes.Page and
              blob_properties.blob_type !=
-             azure.storage.blob.models._BlobTypes.PageBlob)):
+             azure.storage.blob._models.BlobType.PageBlob)):
         raise RuntimeError(
             'existing blob type {} mismatch with mode {}'.format(
                 blob_properties.blob_type, mode))
