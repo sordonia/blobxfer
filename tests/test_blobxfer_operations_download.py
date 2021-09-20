@@ -1131,8 +1131,8 @@ def test_start(
         patched_lb, patched_lfmo, tmpdir):
     patched_lfmo._check_thread = mock.MagicMock()
 
-    b = azure.storage.blob.models.Blob(name='remote/path/name')
-    b.properties.content_length = 1
+    b = azure.storage.blob._models.BlobProperties(name='remote/path/name', content_md5=b'abc')
+    b.size = 1
     b.metadata = {}
     patched_lb.side_effect = [[b]]
     d = _create_downloader_for_start(tmpdir)
@@ -1168,7 +1168,7 @@ def test_start(
         d._download_terminate = True
     assert d._pre_md5_skip_on_check.call_count == 1
 
-    b.properties.content_length = 0
+    b.size = 0
     patched_lb.side_effect = [[b]]
     d = _create_downloader_for_start(tmpdir)
     d._check_download_conditions.return_value = ops.DownloadAction.Download
@@ -1179,7 +1179,7 @@ def test_start(
     dd = d._transfer_queue.get()
     assert 'remote' in dd.final_path.parts
 
-    b.properties.content_length = 0
+    b.size = 0
     patched_lb.side_effect = [[b]]
     d = _create_downloader_for_start(tmpdir)
     d._check_download_conditions.return_value = ops.DownloadAction.Download
@@ -1191,7 +1191,7 @@ def test_start(
     dd = d._transfer_queue.get()
     assert 'remote' not in dd.final_path.parts
 
-    b.properties.content_length = 0
+    b.size = 0
     patched_lb.side_effect = [[b]]
     d = _create_downloader_for_start(tmpdir)
     d._general_options.dry_run = True
@@ -1200,9 +1200,9 @@ def test_start(
     assert d._transfer_queue.qsize() == 0
 
     # test exception count
-    b = azure.storage.blob.models.Blob(name='name')
+    b = azure.storage.blob._models.BlobProperties(name='name', content_md5=b'abc')
     b.metadata = {}
-    b.properties.content_length = 1
+    b.size = 1
     patched_lb.side_effect = [[b]]
     d = _create_downloader_for_start(tmpdir)
     d._spec.destination.is_dir = False

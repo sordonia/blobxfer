@@ -917,9 +917,11 @@ def test_check_upload_conditions(gmfm):
         assert u._check_upload_conditions(lp, ase) == ops.UploadAction.Upload
 
 
-@mock.patch('blobxfer.operations.azure.file.get_file_properties')
-@mock.patch('blobxfer.operations.azure.blob.get_blob_properties')
-def test_check_for_existing_remote(gbp, gfp):
+def test_check_for_existing_remote(mocker):
+    gfp = mocker.patch('blobxfer.operations.azure.file.get_file_properties')
+    b = azure.storage.blob._models.BlobProperties(name='name', content_md5=b'abc')
+    gbp = mocker.patch('blobxfer.operations.azure.blob.get_blob_properties',
+                       return_value=b, name='gbp')
     u = ops.Uploader(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
     u._general_options.dry_run = False
     u._spec.options.overwrite = True
@@ -965,24 +967,24 @@ def test_check_for_existing_remote(gbp, gfp):
     with mock.patch(
             'blobxfer.models.crypto.EncryptionMetadata.'
             'encryption_metadata_exists', return_value=False):
-        gbp.return_value = mock.MagicMock()
+        gbp.return_value = b
         assert u._check_for_existing_remote(sa, 'cont', 'name') is not None
 
     # check access tiers
     with mock.patch(
             'blobxfer.models.crypto.EncryptionMetadata.'
             'encryption_metadata_exists', return_value=False):
-        gbp.return_value = mock.MagicMock()
-        gbp.return_value.properties.blob_type = \
-            azure.storage.blob.models._BlobTypes.BlockBlob
-        gbp.return_value.properties.blob_tier = None
+        gbp.return_value = b
+        gbp.return_value.blob_type = \
+            azure.storage.blob._models.BlobType.BlockBlob
+        gbp.return_value.blob_tier = None
 
         u._spec.options.access_tier = None
         ase = u._check_for_existing_remote(sa, 'cont', 'name')
         assert ase is not None
         assert ase.access_tier is None
 
-        gbp.return_value.properties.blob_tier = 'Cool'
+        gbp.return_value.blob_tier = 'Cool'
         ase = u._check_for_existing_remote(sa, 'cont', 'name')
         assert ase is not None
         assert ase.access_tier is None
