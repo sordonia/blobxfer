@@ -223,7 +223,7 @@ def get_blob_range(ase, offsets, timeout=None):
         length=offsets.range_end - offsets.range_start + 1,
         validate_content=False,  # HTTPS takes care of integrity during xfer
         timeout=timeout,
-    ).content_as_bytes()
+    ).readall()
 
 
 def create_container(ase, containers_created, timeout=None):
