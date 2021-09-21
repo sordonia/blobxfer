@@ -51,6 +51,9 @@ def test_put_block_from_url():
     dst_ase.client.put_block_from_url = mock.MagicMock()
 
     src_ase = mock.MagicMock()
+    src_ase.name = 'src_ase_name'
+    src_ase.client.account_name = 'name'
+    src_ase.container = 'container'
     src_ase.path = 'https://host/remote/path'
     src_ase.is_arbitrary_url = True
 
@@ -58,21 +61,22 @@ def test_put_block_from_url():
     offsets.chunk_num = 0
 
     ops.put_block_from_url(src_ase, dst_ase, offsets)
-    assert dst_ase.client.put_block_from_url.call_count == 1
+    assert dst_ase.client.get_container_client().get_blob_client().stage_block_from_url.call_count == 1
 
     src_ase.is_arbitrary_url = False
 
-    src_ase.client.account_key = 'key'
+    # azurite well-known account key
+    src_ase.client.account_key = 'Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=='
     src_ase.client.generate_blob_shared_access_signature.return_value = 'sas'
 
     ops.put_block_from_url(src_ase, dst_ase, offsets)
-    assert dst_ase.client.put_block_from_url.call_count == 2
+    assert dst_ase.client.get_container_client().get_blob_client().stage_block_from_url.call_count == 2
 
     src_ase.client.account_key = None
     src_ase.client.sas_token = 'sastoken'
 
     ops.put_block_from_url(src_ase, dst_ase, offsets)
-    assert dst_ase.client.put_block_from_url.call_count == 3
+    assert dst_ase.client.get_container_client().get_blob_client().stage_block_from_url.call_count == 3
 
     src_ase.client.account_key = 'key'
     src_ase.client.sas_token = None
@@ -80,7 +84,7 @@ def test_put_block_from_url():
     src_ase.client.generate_file_shared_access_signature.return_value = 'sas'
 
     ops.put_block_from_url(src_ase, dst_ase, offsets)
-    assert dst_ase.client.put_block_from_url.call_count == 4
+    assert dst_ase.client.get_container_client().get_blob_client().stage_block_from_url.call_count == 4
 
 
 def test_put_block_list():

@@ -165,6 +165,7 @@ def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
                     src_ase.client.account_name,
                     src_ase.container,
                     src_ase.name,
+                    account_key=src_ase.client.account_key,
                     permission=azure.storage.blob.BlobSasPermissions(read=True),
                     expiry=datetime.datetime.utcnow() + datetime.timedelta(
                         days=7),
