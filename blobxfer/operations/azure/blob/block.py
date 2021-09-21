@@ -198,13 +198,13 @@ def put_block_list(
     """
     # construct block list
     block_list = [
-        azure.storage.blob.BlobBlock(id=_format_block_id(x))
+        azure.storage.blob.BlobBlock(block_id=_format_block_id(x))
         for x in range(0, last_block_num + 1)
     ]
 
     get_blob_client_from_ase(ase).commit_block_list(
         block_list=block_list,
-        content_settings=azure.storage.blob.models.ContentSettings(
+        content_settings=azure.storage.blob._models.ContentSettings(
             content_type=ase.content_type,
             content_md5=convert_md5_to_bytes(md5),
             cache_control=ase.cache_control,
@@ -231,7 +231,7 @@ def get_committed_block_list(ase, timeout=None):
         snapshot = None
 
     # committed type is already the default, [0] is committed blocks
-    return get_blob_client_from_ase(ase).get_block_list(snapshot=snapshot, timeout=timeout)[0]
+    return get_blob_client_from_ase(ase, snapshot=snapshot).get_block_list(timeout=timeout)[0]
 
 
 def set_blob_access_tier(ase, timeout=None):

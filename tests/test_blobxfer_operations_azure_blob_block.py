@@ -91,17 +91,18 @@ def test_put_block_list():
     ase = mock.MagicMock()
     ase.name = 'abc'
     ops.put_block_list(ase, 1, None, None)
-    assert ase.client.put_block_list.call_count == 1
+    assert ase.client.get_container_client().get_blob_client().commit_block_list.call_count == 1
 
 
-def test_get_committed_block_list():
-    ase = mock.MagicMock()
-    ase.name = 'abc'
+def test_get_committed_block_list(mocker):
+    ase = mock.MagicMock(name='ase')
+    blobclient = azure.storage.blob.BlobClient(account_url='name.blob.windows.net', container_name='container', blob_name='name')
     gbl = mock.MagicMock()
     gbl.committed_blocks = 1
-    ase.client.get_block_list.return_value = gbl
-    assert ops.get_committed_block_list(ase) == 1
+    gbcfa = mocker.patch('blobxfer.operations.azure.blob.block.get_blob_client_from_ase', return_value=blobclient)
+    # blobclient._client.block_blob.get_block_list.return_value = gbl
+    assert len(ops.get_committed_block_list(ase)) == 1
 
     ase.name = 'abc?snapshot=123'
     gbl.committed_blocks = 2
-    assert ops.get_committed_block_list(ase) == 2
+    assert len(ops.get_committed_block_list(ase)) == 2

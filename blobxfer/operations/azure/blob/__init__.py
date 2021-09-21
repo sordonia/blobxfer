@@ -55,16 +55,16 @@ def get_container_client_from_ase(ase) -> ContainerClient:
     return ase.client.get_container_client(ase.container)
 
 
-def get_blob_client(client, container, prefix) -> BlobClient:
+def get_blob_client(client, container, prefix, snapshot=None) -> BlobClient:
     """Instantiates a BlobClient from a BlobServiceClient.
     """
-    return get_container_client(client, container).get_blob_client(prefix)
+    return get_container_client(client, container).get_blob_client(prefix, snapshot=snapshot)
 
 
-def get_blob_client_from_ase(ase) -> BlobClient:
+def get_blob_client_from_ase(ase, snapshot=None) -> BlobClient:
     """Instantiates a BlobClient from a ase object.
     """
-    return get_blob_client(ase.client, ase.container, ase.name)
+    return get_blob_client(ase.client, ase.container, ase.name, snapshot=snapshot)
 
 
 def check_if_single_blob(client, container, prefix, timeout=None):
