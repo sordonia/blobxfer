@@ -19,7 +19,6 @@ import blobxfer.operations.azure as azops
 def test_storage_credentials():
     go = mock.MagicMock(name='go')
     go.timeout.max_retries = None
-    go.proxy = None
 
     creds = azops.StorageCredentials(go)
 
@@ -65,9 +64,8 @@ def test_storage_credentials():
 def test_key_is_sas():
     to = mock.MagicMock(name='to')
     to.max_retries = None
-    to.proxy = None
 
-    proxy = None
+    proxy = mock.MagicMock(name='proxy')
 
     a = azops.StorageAccount(
         'name', 'AAAAAA==', 'core.windows.net', 10, to, proxy)
