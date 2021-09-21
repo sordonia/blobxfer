@@ -60,6 +60,9 @@ def create_client(storage_account, timeout, proxy):
             connection_timeout=timeout.timeout[0],
             read_timeout=timeout.timeout[1],
             user_agent=f"blobxfer/{blobxfer.__version__}",
+            retry_policy=blobxfer.retry.ExponentialRetryWithMaxWait(
+                max_retries=timeout.max_retries),
+            proxies=proxy,
         )
     else:
         client = azure.storage.blob.BlobServiceClient(
@@ -69,16 +72,11 @@ def create_client(storage_account, timeout, proxy):
             connection_timeout=timeout.timeout[0],
             read_timeout=timeout.timeout[1],
             user_agent=f"blobxfer/{blobxfer.__version__}",
+            retry_policy=blobxfer.retry.ExponentialRetryWithMaxWait(
+                max_retries=timeout.max_retries),
+            proxies=proxy,
         )
 
-    # set proxy
-    if proxy is not None:
-        raise NotImplementedError()
-        #    client.set_proxy(
-        #        proxy.host, proxy.port, proxy.username, proxy.password)
-    # set retry policy
-    client._config.retry_policy = blobxfer.retry.ExponentialRetryWithMaxWait(
-        max_retries=timeout.max_retries).retry
     return client
 
 

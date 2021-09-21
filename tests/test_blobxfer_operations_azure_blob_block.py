@@ -16,11 +16,11 @@ import blobxfer.operations.azure.blob.block as ops
 def test_create_client():
     to = mock.MagicMock()
     to.max_retries = None
-    proxy = None
+    proxy = mock.MagicMock(name='proxy')
 
     sa = azops.StorageAccount(
-        'name', 'AAAAAA==', 'core.windows.net', 10, to, proxy)
-    client = ops.create_client(sa, to, proxy=None)
+        'name', 'AAAAAA==', 'core.windows.net', 10, to, proxy=proxy)
+    client = ops.create_client(sa, to, proxy=proxy)
     assert client is not None
     assert isinstance(client, azure.storage.blob._blob_service_client.BlobServiceClient)
     assert isinstance(
@@ -28,19 +28,18 @@ def test_create_client():
         azure.storage.blob._shared.authentication.SharedKeyCredentialPolicy)
     assert client._config.user_agent_policy._user_agent.startswith(
         'blobxfer/{}'.format(blobxfer.version.__version__))
-    # assert client._httpclient.proxies is not None
+    assert client._config.proxy_policy.proxies is not None
 
     sa = azops.StorageAccount(
         'name', '?key&sig=key', 'core.windows.net', 10, to, None)
     client = ops.create_client(sa, to, None)
     assert client is not None
     assert isinstance(client, azure.storage.blob._blob_service_client.BlobServiceClient)
-    assert isinstance(
-        client.authentication,
-        azure.storage.common._auth._StorageSASAuthentication)
+    assert sa.is_sas
+    assert client.url.endswith("?sig=key")
     assert client._config.user_agent_policy._user_agent.startswith(
         'blobxfer/{}'.format(blobxfer.version.__version__))
-    assert client._httpclient.proxies is None
+    assert client._config.proxy_policy.proxies is None
 
 
 def test_format_block_id():
