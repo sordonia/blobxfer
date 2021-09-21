@@ -53,16 +53,23 @@ def create_client(storage_account, timeout, proxy):
     :return: block blob service client
     """
 
-    client = azure.storage.blob.BlobServiceClient(
-        f"https://{storage_account.name}.blob.core.windows.net",
-        credential=storage_account.key,
-        session=storage_account.session,
-        connection_timeout=timeout.timeout[0],
-        read_timeout=timeout.timeout[1],
-    )
-    version = blobxfer.__version__
-    user_agent = client._config.user_agent_policy._user_agent
-    client._config.user_agent_policy._user_agent = f"blobxfer/{version} {user_agent}"
+    if storage_account.is_sas:
+        client = azure.storage.blob.BlobServiceClient(
+            f"https://{storage_account.name}.blob.{storage_account.endpoint}?{storage_account.key}",
+            session=storage_account.session,
+            connection_timeout=timeout.timeout[0],
+            read_timeout=timeout.timeout[1],
+            user_agent=f"blobxfer/{blobxfer.__version__}",
+        )
+    else:
+        client = azure.storage.blob.BlobServiceClient(
+            f"https://{storage_account.name}.blob.{storage_account.endpoint}",
+            credential=storage_account.key,
+            session=storage_account.session,
+            connection_timeout=timeout.timeout[0],
+            read_timeout=timeout.timeout[1],
+            user_agent=f"blobxfer/{blobxfer.__version__}",
+        )
 
     # set proxy
     if proxy is not None:
