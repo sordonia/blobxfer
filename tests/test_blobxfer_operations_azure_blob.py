@@ -153,6 +153,7 @@ def test_get_blob_range():
     ret = mock.MagicMock(name='ret')
     BYTES = b'\0'
     ret.content_as_bytes.return_value = BYTES
+    ret.readall.return_value = BYTES
     ase.client.get_container_client().download_blob.return_value = ret
     ase.container = 'cont'
     ase.name = 'name'
