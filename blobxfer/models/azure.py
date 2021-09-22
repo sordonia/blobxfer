@@ -364,7 +364,9 @@ class StorageEntity(object):
         self._snapshot = blob.snapshot
         self._lmt = blob.last_modified
         self._size = blob.size
-        self._md5 = blobxfer.util.base64_encode_as_string(blob.content_settings.content_md5)
+        self._md5 = blob.content_settings.content_md5
+        if self._md5 is not None:
+          self._md5 = blobxfer.util.base64_encode_as_string(self._md5)
         self._cache_control = blob.content_settings.cache_control
         self._content_type = blob.content_settings.content_type
         if blob.blob_type == BlobType.AppendBlob:

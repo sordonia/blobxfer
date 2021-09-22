@@ -605,7 +605,7 @@ def test_azuresourcepath_blobs(patched_gbp, patched_lb, patched_em):
         patched_lb.side_effect = [[b]]
         assert len(list(asp.files(creds, options, False))) == 0
 
-    be = azure.storage.blob.models.Blob(name='name')
+    be = azure.storage.blob._models.BlobProperties(name='name')
     be.metadata = {'encryptiondata': {'a': 'b'}}
     patched_lb.side_effect = [[be]]
     patched_em.encryption_metadata_exists.return_value = True
