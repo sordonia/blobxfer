@@ -3,6 +3,7 @@
 
 # stdlib imports
 import unittest.mock as mock
+import binascii
 # non-stdlib imports
 import azure.storage.common
 # local imports
@@ -98,11 +99,15 @@ def test_get_committed_block_list(mocker):
     ase = mock.MagicMock(name='ase')
     blobclient = azure.storage.blob.BlobClient(account_url='name.blob.windows.net', container_name='container', blob_name='name')
     gbl = mock.MagicMock()
-    gbl.committed_blocks = 1
+    block = mock.MagicMock()
+    block.name = binascii.b2a_base64(b'name')
+    gbl.committed_blocks = [block]
     gbcfa = mocker.patch('blobxfer.operations.azure.blob.block.get_blob_client_from_ase', return_value=blobclient)
+    mocker.patch('azure.storage.blob._generated.operations._block_blob_operations.BlockBlobOperations.get_block_list',
+                 return_value=gbl)
     # blobclient._client.block_blob.get_block_list.return_value = gbl
     assert len(ops.get_committed_block_list(ase)) == 1
 
     ase.name = 'abc?snapshot=123'
-    gbl.committed_blocks = 2
+    gbl.committed_blocks = [block] * 2
     assert len(ops.get_committed_block_list(ase)) == 2
