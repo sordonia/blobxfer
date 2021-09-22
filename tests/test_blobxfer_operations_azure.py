@@ -250,8 +250,7 @@ def test_handle_vectored_io_stripe(patched_gbp, patched_gfp):
     is_file = False
     container = 'cont'
     entity = mock.MagicMock(name='entity')
-    entity.content_settings.content_md5 = b'abc'
-    entity = azure.storage.blob._models.BlobProperties(content_md5=b'abc')
+    entity.content_settings.content_md5 = None
 
     p = '/cont/remote/path'
     asp = azops.SourcePath()
