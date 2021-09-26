@@ -126,8 +126,8 @@ def put_block(ase, offsets, data, timeout=None):
     :param int timeout: timeout
     """
     get_blob_client_from_ase(ase).stage_block(
-        data or b'',
         block_id=_format_block_id(offsets.chunk_num),
+        data=data or b'',
         validate_content=False,  # integrity is enforced with HTTPS
         timeout=timeout
     )  # noqa
