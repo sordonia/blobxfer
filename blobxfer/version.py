@@ -22,4 +22,4 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-__version__ = '2.0.0.alpha2'
+__version__ = '2.0.0.alpha3'
