@@ -6,6 +6,7 @@ import unittest.mock as mock
 # non-stdlib imports
 import azure.common
 import azure.storage.blob
+import azure.core.exceptions
 import pytest
 # local imports
 import blobxfer.models.azure as azmodels
@@ -13,7 +14,13 @@ import blobxfer.models.azure as azmodels
 import blobxfer.operations.azure.blob as ops
 
 
-def test_check_if_single_blob():
+class MockResponse:
+    def __init__(self, reason, status_code):
+        self.reason = reason
+        self.status_code = status_code
+
+
+def test_check_if_single_blob(mocker):
     client = mock.MagicMock()
     client.get_blob_properties.return_value = True
 
@@ -25,9 +32,8 @@ def test_check_if_single_blob():
     assert result
 
     client = mock.MagicMock()
-    client.get_blob_properties = mock.MagicMock()
-    client.get_blob_properties.side_effect = \
-        azure.common.AzureMissingResourceHttpError('msg', 404)
+    client.get_container_client().get_blob_client.side_effect = \
+        azure.core.exceptions.ResourceNotFoundError('msg', MockResponse("not found", 404))
 
     result = ops.check_if_single_blob(client, 'a', 'b/c')
     assert not result
@@ -40,28 +46,28 @@ def test_get_blob_properties():
 
     client = mock.MagicMock()
     blob = mock.MagicMock()
-    client.get_blob_properties.side_effect = \
-        azure.common.AzureMissingResourceHttpError('msg', 'code')
+    client.get_container_client().get_blob_client.side_effect = \
+        azure.core.exceptions.ResourceNotFoundError('msg', MockResponse('code', 404))
 
     ret = ops.get_blob_properties(
         client, 'cont', None, azmodels.StorageModes.Append)
     assert ret is None
 
     blob = mock.MagicMock()
-    blob.properties.blob_type = azure.storage.blob.models._BlobTypes.PageBlob
+    blob.blob_type = azure.storage.blob._models.BlobType.PageBlob
     client = mock.MagicMock()
-    client.get_blob_properties.return_value = blob
+    client.get_container_client().get_blob_client().get_blob_properties.return_value = blob
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match=".*PageBlob mismatch.*Append"):
         ops.get_blob_properties(
             client, 'cont', None, azmodels.StorageModes.Append)
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match=".*PageBlob mismatch.*Block"):
         ops.get_blob_properties(
             client, 'cont', None, azmodels.StorageModes.Block)
 
-    blob.properties.blob_type = azure.storage.blob.models._BlobTypes.BlockBlob
-    with pytest.raises(RuntimeError):
+    blob.blob_type = azure.storage.blob._models.BlobType.BlockBlob
+    with pytest.raises(RuntimeError, match=".*BlockBlob mismatch.*Page"):
         ops.get_blob_properties(
             client, 'cont', None, azmodels.StorageModes.Page)
 
@@ -76,10 +82,10 @@ def test_list_blobs():
                 None, 'cont', 'prefix', azmodels.StorageModes.File, True):
             pass
 
-    _blob = azure.storage.blob.models.Blob(name='dir/name')
-    _blob.properties = azure.storage.blob.models.BlobProperties()
+    _blob = azure.storage.blob._models.BlobProperties(name='dir/name')
     client = mock.MagicMock()
-    client.list_blobs.return_value = [_blob]
+    client.get_container_client().list_blobs.return_value = [_blob]
+    client.get_container_client().get_blob_client().get_blob_properties.return_value = _blob
 
     i = 0
     for blob in ops.list_blobs(
@@ -95,8 +101,8 @@ def test_list_blobs():
         assert blob.name == _blob.name
     assert i == 1
 
-    _blob.properties.blob_type = \
-        azure.storage.blob.models._BlobTypes.AppendBlob
+    _blob.blob_type = \
+        azure.storage.blob._models.BlobType.AppendBlob
     i = 0
     for blob in ops.list_blobs(
             client, 'dir', 'prefix', azmodels.StorageModes.Block, True):
@@ -111,8 +117,8 @@ def test_list_blobs():
         assert blob.name == _blob.name
     assert i == 0
 
-    _blob.properties.blob_type = \
-        azure.storage.blob.models._BlobTypes.BlockBlob
+    _blob.blob_type = \
+        azure.storage.blob._models.BlobType.BlockBlob
     i = 0
     for blob in ops.list_blobs(
             client, 'dir', 'prefix', azmodels.StorageModes.Append, True):
@@ -137,16 +143,18 @@ def test_list_blobs():
 def test_list_all_blobs():
     client = mock.MagicMock()
     blob = mock.MagicMock()
-    client.list_blobs.return_value = [blob, blob]
+    client.get_container_client().list_blobs.return_value = [blob, blob]
 
     assert len(list(ops.list_all_blobs(client, 'cont'))) == 2
 
 
 def test_get_blob_range():
-    ase = mock.MagicMock()
-    ret = mock.MagicMock()
-    ret.content = b'\0'
-    ase.client._get_blob.return_value = ret
+    ase = mock.MagicMock(name='ase')
+    ret = mock.MagicMock(name='ret')
+    BYTES = b'\0'
+    ret.content_as_bytes.return_value = BYTES
+    ret.readall.return_value = BYTES
+    ase.client.get_container_client().download_blob.return_value = ret
     ase.container = 'cont'
     ase.name = 'name'
     ase.snapshot = None
@@ -154,7 +162,7 @@ def test_get_blob_range():
     offsets.start_range = 0
     offsets.end_range = 1
 
-    assert ops.get_blob_range(ase, offsets) == ret.content
+    assert ops.get_blob_range(ase, offsets) == BYTES
 
 
 def test_create_container():

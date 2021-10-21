@@ -30,6 +30,11 @@ import azure.storage.blob
 # local imports
 import blobxfer.models.azure
 import blobxfer.retry
+from blobxfer.operations.azure.blob import (
+    get_blob_client_from_ase, get_blob_client,
+    get_container_client, convert_md5_to_bytes,
+    get_container_client_from_ase
+)
 
 # create logger
 logger = logging.getLogger(__name__)
@@ -47,27 +52,31 @@ def create_client(storage_account, timeout, proxy):
     :rtype: azure.storage.blob.BlockBlobService
     :return: block blob service client
     """
+
     if storage_account.is_sas:
-        client = azure.storage.blob.BlockBlobService(
-            account_name=storage_account.name,
-            sas_token=storage_account.key,
-            endpoint_suffix=storage_account.endpoint,
-            request_session=storage_account.session,
-            socket_timeout=timeout.timeout)
+        client = azure.storage.blob.BlobServiceClient(
+            f"https://{storage_account.name}.blob.{storage_account.endpoint}?{storage_account.key}",
+            session=storage_account.session,
+            connection_timeout=timeout.timeout[0],
+            read_timeout=timeout.timeout[1],
+            user_agent=f"blobxfer/{blobxfer.__version__}",
+            retry_policy=azure.storage.blob.ExponentialRetry(
+                retry_total=timeout.max_retries),
+            proxies=proxy,
+        )
     else:
-        client = azure.storage.blob.BlockBlobService(
-            account_name=storage_account.name,
-            account_key=storage_account.key,
-            endpoint_suffix=storage_account.endpoint,
-            request_session=storage_account.session,
-            socket_timeout=timeout.timeout)
-    # set proxy
-    if proxy is not None:
-        client.set_proxy(
-            proxy.host, proxy.port, proxy.username, proxy.password)
-    # set retry policy
-    client.retry = blobxfer.retry.ExponentialRetryWithMaxWait(
-        max_retries=timeout.max_retries).retry
+        client = azure.storage.blob.BlobServiceClient(
+            f"https://{storage_account.name}.blob.{storage_account.endpoint}",
+            credential=storage_account.key,
+            session=storage_account.session,
+            connection_timeout=timeout.timeout[0],
+            read_timeout=timeout.timeout[1],
+            user_agent=f"blobxfer/{blobxfer.__version__}",
+            retry_policy=azure.storage.blob.ExponentialRetry(
+                retry_total=timeout.max_retries),
+            proxies=proxy,
+        )
+
     return client
 
 
@@ -81,18 +90,20 @@ def create_blob(ase, data, md5, metadata, timeout=None):
     :param dict metadata: metadata kv pairs
     :param int timeout: timeout
     """
-    ase.client._put_blob(
-        container_name=ase.container,
-        blob_name=ase.name,
-        blob=data,
-        content_settings=azure.storage.blob.models.ContentSettings(
+    # the previous sdk assumed b'' if data was None, replicate behavior for data
+    # also convert md5 as bytes are expected
+    get_container_client_from_ase(ase).upload_blob(
+        ase.name,
+        data=data or b'',
+        content_settings=azure.storage.blob._models.ContentSettings(
             content_type=ase.content_type,
-            content_md5=md5,
+            content_md5=convert_md5_to_bytes(md5),
             cache_control=ase.cache_control,
         ),
         metadata=metadata,
         validate_content=False,  # integrity is enforced with HTTPS
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )  # noqa
 
 
 def _format_block_id(chunk_num):
@@ -114,13 +125,12 @@ def put_block(ase, offsets, data, timeout=None):
     :param bytes data: data
     :param int timeout: timeout
     """
-    ase.client.put_block(
-        container_name=ase.container,
-        blob_name=ase.name,
-        block=data,
+    get_blob_client_from_ase(ase).stage_block(
         block_id=_format_block_id(offsets.chunk_num),
+        data=data or b'',
         validate_content=False,  # integrity is enforced with HTTPS
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )  # noqa
 
 
 def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
@@ -140,6 +150,7 @@ def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
     else:
         if blobxfer.util.is_not_empty(src_ase.client.account_key):
             if src_ase.mode == blobxfer.models.azure.StorageModes.File:
+                # still v2
                 sas = src_ase.client.generate_file_shared_access_signature(
                     share_name=src_ase.container,
                     file_name=src_ase.name,
@@ -148,10 +159,14 @@ def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
                         days=7),
                 )
             else:
-                sas = src_ase.client.generate_blob_shared_access_signature(
-                    container_name=src_ase.container,
-                    blob_name=src_ase.name,
-                    permission=azure.storage.blob.BlobPermissions(read=True),
+                # this is v12
+                from azure.storage.blob import generate_blob_sas
+                sas = generate_blob_sas(
+                    src_ase.client.account_name,
+                    src_ase.container,
+                    src_ase.name,
+                    account_key=src_ase.client.account_key,
+                    permission=azure.storage.blob.BlobSasPermissions(read=True),
                     expiry=datetime.datetime.utcnow() + datetime.timedelta(
                         days=7),
                 )
@@ -159,15 +174,15 @@ def put_block_from_url(src_ase, dst_ase, offsets, timeout=None):
             sas = src_ase.client.sas_token
         src_url = 'https://{}/{}?{}'.format(
             src_ase.client.primary_endpoint, src_ase.path, sas)
-    dst_ase.client.put_block_from_url(
-        container_name=dst_ase.container,
-        blob_name=dst_ase.name,
-        copy_source_url=src_url,
-        source_range_start=offsets.range_start,
-        source_range_end=offsets.range_end,
+
+    get_blob_client_from_ase(dst_ase).stage_block_from_url(
         block_id=_format_block_id(offsets.chunk_num),
+        source_url=src_url,
+        source_offset=offsets.range_start,
+        source_length=offsets.range_end - offsets.range_start + 1,
         source_content_md5=None,
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )  # noqa
 
 
 def put_block_list(
@@ -183,21 +198,21 @@ def put_block_list(
     """
     # construct block list
     block_list = [
-        azure.storage.blob.BlobBlock(id=_format_block_id(x))
+        azure.storage.blob.BlobBlock(block_id=_format_block_id(x))
         for x in range(0, last_block_num + 1)
     ]
-    ase.client.put_block_list(
-        container_name=ase.container,
-        blob_name=ase.name,
+
+    get_blob_client_from_ase(ase).commit_block_list(
         block_list=block_list,
-        content_settings=azure.storage.blob.models.ContentSettings(
+        content_settings=azure.storage.blob._models.ContentSettings(
             content_type=ase.content_type,
-            content_md5=md5,
+            content_md5=convert_md5_to_bytes(md5),
             cache_control=ase.cache_control,
         ),
         metadata=metadata,
         validate_content=False,  # integrity is enforced with HTTPS
-        timeout=timeout)
+        timeout=timeout
+    )
 
 
 def get_committed_block_list(ase, timeout=None):
@@ -214,12 +229,9 @@ def get_committed_block_list(ase, timeout=None):
     else:
         blob_name = ase.name
         snapshot = None
-    return ase.client.get_block_list(
-        container_name=ase.container,
-        blob_name=blob_name,
-        snapshot=snapshot,
-        block_list_type=azure.storage.blob.BlockListType.Committed,
-        timeout=timeout).committed_blocks
+
+    # committed type is already the default, [0] is committed blocks
+    return get_blob_client_from_ase(ase, snapshot=snapshot).get_block_list(timeout=timeout)[0]
 
 
 def set_blob_access_tier(ase, timeout=None):
@@ -228,8 +240,7 @@ def set_blob_access_tier(ase, timeout=None):
     :param blobxfer.models.azure.StorageEntity ase: Azure StorageEntity
     :param int timeout: timeout
     """
-    ase.client.set_standard_blob_tier(
-        container_name=ase.container,
-        blob_name=ase.name,
+    get_blob_client_from_ase(ase).set_standard_blob_tier(
         standard_blob_tier=ase.access_tier,
-        timeout=timeout)  # noqa
+        timeout=timeout
+    )  # noqa

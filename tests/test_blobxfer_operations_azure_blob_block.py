@@ -3,6 +3,7 @@
 
 # stdlib imports
 import unittest.mock as mock
+import binascii
 # non-stdlib imports
 import azure.storage.common
 # local imports
@@ -16,30 +17,30 @@ import blobxfer.operations.azure.blob.block as ops
 def test_create_client():
     to = mock.MagicMock()
     to.max_retries = None
+    proxy = mock.MagicMock(name='proxy')
 
     sa = azops.StorageAccount(
-        'name', 'AAAAAA==', 'core.windows.net', 10, to, mock.MagicMock())
-    client = ops.create_client(sa, to, mock.MagicMock())
+        'name', 'AAAAAA==', 'core.windows.net', 10, to, proxy=proxy)
+    client = ops.create_client(sa, to, proxy=proxy)
     assert client is not None
-    assert isinstance(client, azure.storage.blob.BlockBlobService)
+    assert isinstance(client, azure.storage.blob._blob_service_client.BlobServiceClient)
     assert isinstance(
-        client.authentication,
-        azure.storage.common._auth._StorageSharedKeyAuthentication)
-    assert client._USER_AGENT_STRING.startswith(
+        client.credential,
+        azure.storage.blob._shared.authentication.SharedKeyCredentialPolicy)
+    assert client._config.user_agent_policy._user_agent.startswith(
         'blobxfer/{}'.format(blobxfer.version.__version__))
-    assert client._httpclient.proxies is not None
+    assert client._config.proxy_policy.proxies is not None
 
     sa = azops.StorageAccount(
         'name', '?key&sig=key', 'core.windows.net', 10, to, None)
     client = ops.create_client(sa, to, None)
     assert client is not None
-    assert isinstance(client, azure.storage.blob.BlockBlobService)
-    assert isinstance(
-        client.authentication,
-        azure.storage.common._auth._StorageSASAuthentication)
-    assert client._USER_AGENT_STRING.startswith(
+    assert isinstance(client, azure.storage.blob._blob_service_client.BlobServiceClient)
+    assert sa.is_sas
+    assert client.url.endswith("?sig=key")
+    assert client._config.user_agent_policy._user_agent.startswith(
         'blobxfer/{}'.format(blobxfer.version.__version__))
-    assert client._httpclient.proxies is None
+    assert client._config.proxy_policy.proxies is None
 
 
 def test_format_block_id():
@@ -51,6 +52,9 @@ def test_put_block_from_url():
     dst_ase.client.put_block_from_url = mock.MagicMock()
 
     src_ase = mock.MagicMock()
+    src_ase.name = 'src_ase_name'
+    src_ase.client.account_name = 'name'
+    src_ase.container = 'container'
     src_ase.path = 'https://host/remote/path'
     src_ase.is_arbitrary_url = True
 
@@ -58,21 +62,22 @@ def test_put_block_from_url():
     offsets.chunk_num = 0
 
     ops.put_block_from_url(src_ase, dst_ase, offsets)
-    assert dst_ase.client.put_block_from_url.call_count == 1
+    assert dst_ase.client.get_container_client().get_blob_client().stage_block_from_url.call_count == 1
 
     src_ase.is_arbitrary_url = False
 
-    src_ase.client.account_key = 'key'
+    # azurite well-known account key
+    src_ase.client.account_key = 'Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=='
     src_ase.client.generate_blob_shared_access_signature.return_value = 'sas'
 
     ops.put_block_from_url(src_ase, dst_ase, offsets)
-    assert dst_ase.client.put_block_from_url.call_count == 2
+    assert dst_ase.client.get_container_client().get_blob_client().stage_block_from_url.call_count == 2
 
     src_ase.client.account_key = None
     src_ase.client.sas_token = 'sastoken'
 
     ops.put_block_from_url(src_ase, dst_ase, offsets)
-    assert dst_ase.client.put_block_from_url.call_count == 3
+    assert dst_ase.client.get_container_client().get_blob_client().stage_block_from_url.call_count == 3
 
     src_ase.client.account_key = 'key'
     src_ase.client.sas_token = None
@@ -80,24 +85,29 @@ def test_put_block_from_url():
     src_ase.client.generate_file_shared_access_signature.return_value = 'sas'
 
     ops.put_block_from_url(src_ase, dst_ase, offsets)
-    assert dst_ase.client.put_block_from_url.call_count == 4
+    assert dst_ase.client.get_container_client().get_blob_client().stage_block_from_url.call_count == 4
 
 
 def test_put_block_list():
     ase = mock.MagicMock()
     ase.name = 'abc'
     ops.put_block_list(ase, 1, None, None)
-    assert ase.client.put_block_list.call_count == 1
+    assert ase.client.get_container_client().get_blob_client().commit_block_list.call_count == 1
 
 
-def test_get_committed_block_list():
-    ase = mock.MagicMock()
-    ase.name = 'abc'
+def test_get_committed_block_list(mocker):
+    ase = mock.MagicMock(name='ase')
+    blobclient = azure.storage.blob.BlobClient(account_url='name.blob.windows.net', container_name='container', blob_name='name')
     gbl = mock.MagicMock()
-    gbl.committed_blocks = 1
-    ase.client.get_block_list.return_value = gbl
-    assert ops.get_committed_block_list(ase) == 1
+    block = mock.MagicMock()
+    block.name = binascii.b2a_base64(b'name')
+    gbl.committed_blocks = [block]
+    gbcfa = mocker.patch('blobxfer.operations.azure.blob.block.get_blob_client_from_ase', return_value=blobclient)
+    mocker.patch('azure.storage.blob._generated.operations._block_blob_operations.BlockBlobOperations.get_block_list',
+                 return_value=gbl)
+    # blobclient._client.block_blob.get_block_list.return_value = gbl
+    assert len(ops.get_committed_block_list(ase)) == 1
 
     ase.name = 'abc?snapshot=123'
-    gbl.committed_blocks = 2
-    assert ops.get_committed_block_list(ase) == 2
+    gbl.committed_blocks = [block] * 2
+    assert len(ops.get_committed_block_list(ase)) == 2

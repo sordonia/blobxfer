@@ -667,7 +667,7 @@ class SourcePath(blobxfer.models._BaseSourcePaths):
                     # check for virtual directory placeholder
                     if not is_synccopy:
                         try:
-                            if (blob.metadata[
+                            if (blob.metadata and blob.metadata[
                                     _METADATA_VIRTUAL_DIRECTORY] == 'true'):
                                 continue
                         except KeyError:

@@ -17,7 +17,7 @@ import blobxfer.operations.azure as azops
 
 
 def test_storage_credentials():
-    go = mock.MagicMock()
+    go = mock.MagicMock(name='go')
     go.timeout.max_retries = None
 
     creds = azops.StorageCredentials(go)
@@ -36,13 +36,13 @@ def test_storage_credentials():
     assert a.key == 'somekey1'
     assert a.endpoint == 'core.windows.net'
     assert isinstance(
-        a.append_blob_client, azure.storage.blob.AppendBlobService)
+        a.append_blob_client, azure.storage.blob._blob_service_client.BlobServiceClient)
     assert isinstance(
-        a.block_blob_client, azure.storage.blob.BlockBlobService)
+        a.block_blob_client, azure.storage.blob._blob_service_client.BlobServiceClient)
     assert isinstance(
         a.file_client, azure.storage.file.FileService)
     assert isinstance(
-        a.page_blob_client, azure.storage.blob.PageBlobService)
+        a.page_blob_client, azure.storage.blob._blob_service_client.BlobServiceClient)
 
     with pytest.raises(KeyError):
         a = creds.get_storage_account('sa2')
@@ -62,11 +62,13 @@ def test_storage_credentials():
 
 
 def test_key_is_sas():
-    to = mock.MagicMock()
+    to = mock.MagicMock(name='to')
     to.max_retries = None
 
+    proxy = mock.MagicMock(name='proxy')
+
     a = azops.StorageAccount(
-        'name', 'AAAAAA==', 'core.windows.net', 10, to, mock.MagicMock())
+        'name', 'AAAAAA==', 'core.windows.net', 10, to, proxy)
     assert not a.is_sas
 
     with pytest.raises(ValueError):
@@ -240,14 +242,15 @@ def test_credential_allows_object_write():
 @mock.patch('blobxfer.operations.azure.file.get_file_properties')
 @mock.patch('blobxfer.operations.azure.blob.get_blob_properties')
 def test_handle_vectored_io_stripe(patched_gbp, patched_gfp):
-    creds = mock.MagicMock()
-    options = mock.MagicMock()
+    creds = mock.MagicMock(name='creds')
+    options = mock.MagicMock(name='options')
     options.mode = azmodels.StorageModes.Block
     store_raw_metadata = False
-    sa = mock.MagicMock()
+    sa = mock.MagicMock(name='sa')
     is_file = False
     container = 'cont'
-    entity = mock.MagicMock()
+    entity = mock.MagicMock(name='entity')
+    entity.content_settings.content_md5 = None
 
     p = '/cont/remote/path'
     asp = azops.SourcePath()
@@ -294,8 +297,8 @@ def test_handle_vectored_io_stripe(patched_gbp, patched_gfp):
             ),
         ]
         options.mode = azmodels.StorageModes.Block
-        b0 = azure.storage.blob.models.Blob(name='path-bxslice-0')
-        b1 = azure.storage.blob.models.Blob(name='path-bxslice-1')
+        b0 = azure.storage.blob._models.BlobProperties(name='path-bxslice-0')
+        b1 = azure.storage.blob._models.BlobProperties(name='path-bxslice-1')
         patched_gbp.side_effect = [b0, b1]
         i = 0
         for part in asp._handle_vectored_io_stripe(
@@ -518,7 +521,7 @@ def test_azuresourcepath_blobs(patched_gbp, patched_lb, patched_em):
     sa = mock.MagicMock()
     sa.block_blob_client = mock.MagicMock()
     creds.get_storage_account.return_value = sa
-    b = azure.storage.blob.models.Blob(name='name')
+    b = azure.storage.blob._models.BlobProperties(name='name')
     b.metadata = {}
     patched_lb.side_effect = [[b]]
     patched_em.encryption_metadata_exists = mock.MagicMock()
@@ -601,7 +604,7 @@ def test_azuresourcepath_blobs(patched_gbp, patched_lb, patched_em):
         patched_lb.side_effect = [[b]]
         assert len(list(asp.files(creds, options, False))) == 0
 
-    be = azure.storage.blob.models.Blob(name='name')
+    be = azure.storage.blob._models.BlobProperties(name='name')
     be.metadata = {'encryptiondata': {'a': 'b'}}
     patched_lb.side_effect = [[be]]
     patched_em.encryption_metadata_exists.return_value = True

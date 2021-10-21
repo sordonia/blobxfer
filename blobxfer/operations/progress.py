@@ -118,8 +118,8 @@ def output_parameters(general_options, spec):
             platform.python_implementation(),
             platform.python_version(),
              '64bit' if sys.maxsize > 2**32 else '32bit',
-            azure.storage.blob._constants.__version__,
-            azure.storage.file._constants.__version__,
+            azure.storage.blob.__version__,
+            azure.storage.file.__version__,
             cryptography.__version__,
             requests.__version__,))
     # specific preamble
